@@ -341,6 +341,7 @@ function parseFile(title) {
   if (s.endsWith(' Resplendent')) return null;
   if (s.startsWith('Black Knight ')) return ['Black Knight', s.slice(13)];
   if (s.startsWith('Brigand Boss ')) return ['Brigand Boss', s.slice(13)];
+  if (s.startsWith('Flame Emperor ')) return ['Flame Emperor', s.slice(13)];
   const sp = s.indexOf(' ');
   if (sp < 0) return null;
   return [s.slice(0, sp), s.slice(sp + 1)];
