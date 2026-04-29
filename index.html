@@ -141,27 +141,61 @@ async function nextHero(hero) {
   loader.style.display = 'flex';
   noPort.style.display = 'none';
 
-  const fname = 'File:' + hero[0] + ' ' + hero[1] + ' Face.webp';
-  const url = 'https://feheroes.fandom.com/api.php?action=query&titles='
-    + encodeURIComponent(fname)
-    + '&prop=imageinfo&iiprop=url&format=json&origin=*';
+  // Build CDN URL directly from MD5 hash — no API call needed
+  const imgUrl = buildCdnUrl(hero[0] + ' ' + hero[1] + ' Face.webp');
+  img.src = imgUrl;
+  img.onload  = () => { loader.style.display = 'none'; img.style.display = 'block'; };
+  img.onerror = () => { loader.style.display = 'none'; noPort.style.display = 'flex'; };
+}
 
-  try {
-    const resp = await fetch(url);
-    const json = await resp.json();
-    const page = Object.values(json.query.pages)[0];
-    if (page.imageinfo) {
-      img.src = page.imageinfo[0].url;
-      img.onload  = () => { loader.style.display = 'none'; img.style.display = 'block'; };
-      img.onerror = () => { loader.style.display = 'none'; noPort.style.display = 'flex'; };
-    } else {
-      loader.style.display = 'none';
-      noPort.style.display = 'flex';
-    }
-  } catch {
-    loader.style.display = 'none';
-    noPort.style.display = 'flex';
+// MediaWiki CDN path: /images/HASH[0]/HASH[0..1]/Filename
+function buildCdnUrl(filename) {
+  const normalized = filename.replace(/ /g, '_');
+  const hash = md5(normalized);
+  return 'https://static.wikia.nocookie.net/feheroes_gamepedia_en/images/'
+    + hash[0] + '/' + hash[0] + hash[1] + '/' + encodeURIComponent(normalized) + '/revision/latest?cb=1';
+}
+
+function md5(str) {
+  // Encode to bytes first
+  str = unescape(encodeURIComponent(str));
+  function safeAdd(x,y){var lsw=(x&0xffff)+(y&0xffff);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xffff);}
+  function rol(n,c){return(n<<c)|(n>>>(32-c));}
+  function cmn(q,a,b,x,s,t){return safeAdd(rol(safeAdd(safeAdd(a,q),safeAdd(x,t)),s),b);}
+  function ff(a,b,c,d,x,s,t){return cmn((b&c)|((~b)&d),a,b,x,s,t);}
+  function gg(a,b,c,d,x,s,t){return cmn((b&d)|(c&(~d)),a,b,x,s,t);}
+  function hh(a,b,c,d,x,s,t){return cmn(b^c^d,a,b,x,s,t);}
+  function ii(a,b,c,d,x,s,t){return cmn(c^(b|(~d)),a,b,x,s,t);}
+  var n=str.length, st=[1732584193,-271733879,-1732584194,271733878];
+  function blk64(s,i){var b=[];for(var j=0;j<16;j++)b[j]=(s.charCodeAt(i+j*4))|(s.charCodeAt(i+j*4+1)<<8)|(s.charCodeAt(i+j*4+2)<<16)|(s.charCodeAt(i+j*4+3)<<24);return b;}
+  function cycle(st,b){
+    var a=st[0],bb=st[1],c=st[2],d=st[3];
+    a=ff(a,bb,c,d,b[0],7,-680876936);d=ff(d,a,bb,c,b[1],12,-389564586);c=ff(c,d,a,bb,b[2],17,606105819);bb=ff(bb,c,d,a,b[3],22,-1044525330);
+    a=ff(a,bb,c,d,b[4],7,-176418897);d=ff(d,a,bb,c,b[5],12,1200080426);c=ff(c,d,a,bb,b[6],17,-1473231341);bb=ff(bb,c,d,a,b[7],22,-45705983);
+    a=ff(a,bb,c,d,b[8],7,1770035416);d=ff(d,a,bb,c,b[9],12,-1958414417);c=ff(c,d,a,bb,b[10],17,-42063);bb=ff(bb,c,d,a,b[11],22,-1990404162);
+    a=ff(a,bb,c,d,b[12],7,1804603682);d=ff(d,a,bb,c,b[13],12,-40341101);c=ff(c,d,a,bb,b[14],17,-1502002290);bb=ff(bb,c,d,a,b[15],22,1236535329);
+    a=gg(a,bb,c,d,b[1],5,-165796510);d=gg(d,a,bb,c,b[6],9,-1069501632);c=gg(c,d,a,bb,b[11],14,643717713);bb=gg(bb,c,d,a,b[0],20,-373897302);
+    a=gg(a,bb,c,d,b[5],5,-701558691);d=gg(d,a,bb,c,b[10],9,38016083);c=gg(c,d,a,bb,b[15],14,-660478335);bb=gg(bb,c,d,a,b[4],20,-405537848);
+    a=gg(a,bb,c,d,b[9],5,568446438);d=gg(d,a,bb,c,b[14],9,-1019803690);c=gg(c,d,a,bb,b[3],14,-187363961);bb=gg(bb,c,d,a,b[8],20,1163531501);
+    a=gg(a,bb,c,d,b[13],5,-1444681467);d=gg(d,a,bb,c,b[2],9,-51403784);c=gg(c,d,a,bb,b[7],14,1735328473);bb=gg(bb,c,d,a,b[12],20,-1926607734);
+    a=hh(a,bb,c,d,b[5],4,-378558);d=hh(d,a,bb,c,b[8],11,-2022574463);c=hh(c,d,a,bb,b[11],16,1839030562);bb=hh(bb,c,d,a,b[14],23,-35309556);
+    a=hh(a,bb,c,d,b[1],4,-1530992060);d=hh(d,a,bb,c,b[4],11,1272893353);c=hh(c,d,a,bb,b[7],16,-155497632);bb=hh(bb,c,d,a,b[10],23,-1094730640);
+    a=hh(a,bb,c,d,b[13],4,681279174);d=hh(d,a,bb,c,b[0],11,-358537222);c=hh(c,d,a,bb,b[3],16,-722521979);bb=hh(bb,c,d,a,b[6],23,76029189);
+    a=hh(a,bb,c,d,b[9],4,-640364487);d=hh(d,a,bb,c,b[12],11,-421815835);c=hh(c,d,a,bb,b[15],16,530742520);bb=hh(bb,c,d,a,b[2],23,-995338651);
+    a=ii(a,bb,c,d,b[0],6,-198630844);d=ii(d,a,bb,c,b[7],10,1126891415);c=ii(c,d,a,bb,b[14],15,-1416354905);bb=ii(bb,c,d,a,b[5],21,-57434055);
+    a=ii(a,bb,c,d,b[12],6,1700485571);d=ii(d,a,bb,c,b[3],10,-1894986606);c=ii(c,d,a,bb,b[10],15,-1051523);bb=ii(bb,c,d,a,b[1],21,-2054922799);
+    a=ii(a,bb,c,d,b[8],6,1873313359);d=ii(d,a,bb,c,b[15],10,-30611744);c=ii(c,d,a,bb,b[6],15,-1560198380);bb=ii(bb,c,d,a,b[13],21,1309151649);
+    a=ii(a,bb,c,d,b[4],6,-145523070);d=ii(d,a,bb,c,b[11],10,-1120210379);c=ii(c,d,a,bb,b[2],15,718787259);bb=ii(bb,c,d,a,b[9],21,-343485551);
+    return[safeAdd(a,st[0]),safeAdd(bb,st[1]),safeAdd(c,st[2]),safeAdd(d,st[3])];
   }
+  var i; for(i=64;i<=n;i+=64) st=cycle(st,blk64(str,i-64));
+  var tail=str.slice(i-64), buf=new Array(16).fill(0);
+  for(var j=0;j<tail.length;j++) buf[j>>2]|=tail.charCodeAt(j)<<((j%4)*8);
+  buf[tail.length>>2]|=0x80<<((tail.length%4)*8);
+  if(tail.length>55){st=cycle(st,buf);buf=new Array(16).fill(0);}
+  buf[14]=n*8;
+  st=cycle(st,buf);
+  return st.map(v=>{var s='';for(var k=0;k<4;k++)s+=('0'+((v>>>(k*8))&0xff).toString(16)).slice(-2);return s;}).join('');
 }
 
 function endRound(won) {
