@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FEH: Guess the Hero</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Crimson+Text:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="wrap">
+
+  <header>
+    <h1>GUESS THE HERO</h1>
+    <p>Fire Emblem Heroes</p>
+  </header>
+  <hr class="hdivider">
+
+  <div class="stats">
+    <div class="stat"><span class="stat-label">Score</span><span class="stat-val" id="score">0</span></div>
+    <div class="stat"><span class="stat-label">Streak</span><span class="stat-val" id="streak">0</span></div>
+    <div class="stat"><span class="stat-label">Guesses</span><span class="stat-val" id="guesses">0 / 5</span></div>
+  </div>
+
+  <div id="portrait-box">
+    <div id="loader">
+      <div class="spin"></div>
+      <span id="load-txt">LOADING</span>
+    </div>
+    <div id="no-portrait">Portrait unavailable — press Next</div>
+    <img id="portrait" class="hidden" alt="mystery hero" crossorigin="anonymous">
+    <div id="pips"></div>
+    <div id="result-banner"></div>
+  </div>
+
+  <div id="hint"></div>
+
+  <div class="search-row">
+    <input id="search" type="text" placeholder="Type a hero name..." autocomplete="off" spellcheck="false">
+    <div id="autocomplete"></div>
+  </div>
+
+  <div id="wrong-list"></div>
+
+  <div class="btns">
+    <button class="btn" id="btn-guess">GUESS</button>
+    <button class="btn" id="btn-giveup">GIVE UP</button>
+    <button class="btn" id="btn-next">NEXT →</button>
+  </div>
+
+  <footer>
+    <p>Portraits from <a href="https://feheroes.fandom.com" target="_blank">feheroes.fandom.com</a></p>
+  </footer>
+
+</div>
+<script>
+let heroes = [];
+let cur = null;
+let guesses = 0;
+let done = false;
+let score = 0;
+let streak = 0;
+let acList = [];
+let acIdx = -1;
+const MAX = 5;
+
+const box      = document.getElementById('portrait-box');
+const img      = document.getElementById('portrait');
+const loader   = document.getElementById('loader');
+const loadTxt  = document.getElementById('load-txt');
+const noPort   = document.getElementById('no-portrait');
+const banner   = document.getElementById('result-banner');
+const pips     = document.getElementById('pips');
+const hint     = document.getElementById('hint');
+const search   = document.getElementById('search');
+const ac       = document.getElementById('autocomplete');
+const wrongList= document.getElementById('wrong-list');
+const scoreEl  = document.getElementById('score');
+const streakEl = document.getElementById('streak');
+const guessEl  = document.getElementById('guesses');
+const btnGuess = document.getElementById('btn-guess');
+const btnGive  = document.getElementById('btn-giveup');
+const btnNext  = document.getElementById('btn-next');
+
+function rand() {
+  return heroes[Math.floor(Math.random() * heroes.length)];
+}
+
+function refreshHUD() {
+  scoreEl.textContent  = score;
+  streakEl.textContent = streak;
+  guessEl.textContent  = guesses + ' / ' + MAX;
+}
+
+function rebuildPips() {
+  pips.innerHTML = '';
+  for (let i = 0; i < MAX; i++) {
+    const d = document.createElement('div');
+    d.className = 'pip' + (i < guesses ? ' used' : '');
+    pips.appendChild(d);
+  }
+}
+
+function flash(type) {
+  box.classList.remove('fg', 'fr');
+  void box.offsetWidth; // reflow to restart animation
+  box.classList.add(type === 'win' ? 'fg' : 'fr');
+  setTimeout(() => box.classList.remove('fg', 'fr'), 700);
+}
+
+function showBanner(msg, cls) {
+  banner.textContent = msg;
+  banner.className = 'show ' + cls;
+}
+
+function hideBanner() {
+  banner.className = '';
+}
+
+async function nextHero(hero) {
+  cur = hero;
+  guesses = 0;
+  done = false;
+
+  search.value = '';
+  search.disabled = false;
+  btnGuess.disabled = false;
+  btnGive.disabled = false;
+  btnNext.classList.remove('show');
+  ac.style.display = 'none';
+  wrongList.innerHTML = '';
+  hint.textContent = '';
+  hint.classList.remove('show');
+  hideBanner();
+  rebuildPips();
+  refreshHUD();
+
+  img.style.display = 'none';
+  img.className = 'hidden';
+  box.classList.remove('done');
+  loader.style.display = 'flex';
+  noPort.style.display = 'none';
+
+  const fname = 'File:' + hero[0] + ' ' + hero[1] + ' Face.webp';
+  const url = 'https://feheroes.fandom.com/api.php?action=query&titles='
+    + encodeURIComponent(fname)
+    + '&prop=imageinfo&iiprop=url&format=json&origin=*';
+
+  try {
+    const resp = await fetch(url);
+    const json = await resp.json();
+    const page = Object.values(json.query.pages)[0];
+    if (page.imageinfo) {
+      img.src = page.imageinfo[0].url;
+      img.onload  = () => { loader.style.display = 'none'; img.style.display = 'block'; };
+      img.onerror = () => { loader.style.display = 'none'; noPort.style.display = 'flex'; };
+    } else {
+      loader.style.display = 'none';
+      noPort.style.display = 'flex';
+    }
+  } catch {
+    loader.style.display = 'none';
+    noPort.style.display = 'flex';
+  }
+}
+
+function endRound(won) {
+  done = true;
+  search.disabled = true;
+  btnGuess.disabled = true;
+  btnGive.disabled = true;
+  btnNext.classList.add('show');
+  ac.style.display = 'none';
+  img.className = 'shown';
+  box.classList.add('done');
+
+  if (won) {
+    const pts = Math.max(10, (MAX - guesses + 1) * 10);
+    score += pts;
+    streak++;
+    showBanner('✦ ' + cur[0] + ': ' + cur[1] + '  +' + pts + ' pts', 'win');
+    flash('win');
+  } else {
+    streak = 0;
+    showBanner(cur[0] + ': ' + cur[1], 'reveal');
+    flash('lose');
+  }
+  refreshHUD();
+}
+
+// strips punctuation/case for comparison
+function clean(s) {
+  return s.toLowerCase().replace(/['']/g, "'").replace(/[^a-z0-9' ]/g, '').trim();
+}
+
+function guess() {
+  if (done) return;
+  const val = search.value.trim();
+  if (!val) return;
+  ac.style.display = 'none';
+
+  guesses++;
+  rebuildPips();
+  refreshHUD();
+
+  const g = clean(val);
+  const full  = clean(cur[0] + ' ' + cur[1]);
+  const full2 = clean(cur[0] + ': ' + cur[1]);
+
+  if (g === full || g === full2) {
+    endRound(true);
+    return;
+  }
+
+  // add wrong tag
+  const tag = document.createElement('div');
+  tag.className = 'wrong-tag';
+  tag.textContent = val;
+  wrongList.appendChild(tag);
+  flash('lose');
+
+  if (guesses >= MAX) {
+    endRound(false);
+    return;
+  }
+
+  // hints unlock one at a time
+  const hints = [
+    null,
+    'First name starts with "' + cur[0][0] + '"',
+    'First name: ' + cur[0],
+    cur[0] + ': ' + cur[1].slice(0, 4) + '...',
+    cur[0] + ': ' + cur[1].slice(0, 7) + '...',
+  ];
+  if (hints[guesses]) {
+    hint.textContent = hints[guesses];
+    hint.classList.remove('show');
+    void hint.offsetWidth;
+    hint.classList.add('show');
+  }
+
+  const left = MAX - guesses;
+  showBanner('✗  ' + left + ' guess' + (left !== 1 ? 'es' : '') + ' left', 'bad');
+  setTimeout(hideBanner, 1400);
+  search.value = '';
+  search.focus();
+}
+
+// autocomplete
+function filterHeroes(q) {
+  if (!q) return [];
+  const lq = q.toLowerCase();
+  return heroes.filter(h => {
+    const full = (h[0] + ' ' + h[1]).toLowerCase();
+    return full.includes(lq) || h[0].toLowerCase().startsWith(lq);
+  });
+}
+
+function renderAC(list) {
+  acList = list;
+  acIdx = -1;
+  if (!list.length) { ac.style.display = 'none'; return; }
+  ac.innerHTML = '';
+  list.forEach(h => {
+    const d = document.createElement('div');
+    d.className = 'ac-item';
+    d.innerHTML = '<span class="ac-name">' + h[0] + '</span><span class="ac-epithet">' + h[1] + '</span>';
+    d.addEventListener('mousedown', e => { e.preventDefault(); pickAC(h); });
+    ac.appendChild(d);
+  });
+  ac.style.display = 'block';
+}
+
+function pickAC(h) {
+  search.value = h[0] + ': ' + h[1];
+  ac.style.display = 'none';
+  search.focus();
+}
+
+function highlightAC(i) {
+  ac.querySelectorAll('.ac-item').forEach((el, j) => el.classList.toggle('hi', j === i));
+}
+
+search.addEventListener('input', () => {
+  if (done) return;
+  renderAC(filterHeroes(search.value));
+});
+
+search.addEventListener('keydown', e => {
+  const items = ac.querySelectorAll('.ac-item');
+  if (e.key === 'ArrowDown')  { e.preventDefault(); acIdx = Math.min(acIdx + 1, items.length - 1); highlightAC(acIdx); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); acIdx = Math.max(acIdx - 1, -1); highlightAC(acIdx); }
+  else if (e.key === 'Enter') { e.preventDefault(); acIdx >= 0 && acList[acIdx] ? pickAC(acList[acIdx]) : guess(); }
+  else if (e.key === 'Escape') { ac.style.display = 'none'; }
+});
+
+search.addEventListener('blur', () => setTimeout(() => ac.style.display = 'none', 160));
+
+btnGuess.addEventListener('click', guess);
+btnGive.addEventListener('click',  () => { if (!done) endRound(false); });
+btnNext.addEventListener('click',  () => nextHero(rand()));
+
+// parse "File:Name Epithet Face.webp" into [name, epithet]
+function parseFile(title) {
+  let s = title.replace('File:', '').replace(/ Face\.webp$/i, '').trim();
+  if (s.endsWith(' Resplendent')) return null;
+  if (s.startsWith('Black Knight ')) return ['Black Knight', s.slice(13)];
+  const sp = s.indexOf(' ');
+  if (sp < 0) return null;
+  return [s.slice(0, sp), s.slice(sp + 1)];
+}
+
+async function loadHeroList() {
+  loadTxt.textContent = 'LOADING HEROES';
+  let cont = null;
+  do {
+    let url = 'https://feheroes.fandom.com/api.php?action=query&list=categorymembers&cmtitle=Category:Full_Portrait_files&cmlimit=500&cmtype=file&format=json&origin=*';
+    if (cont) url += '&cmcontinue=' + encodeURIComponent(cont);
+    const r = await fetch(url);
+    const d = await r.json();
+    for (const item of d.query.categorymembers) {
+      const p = parseFile(item.title);
+      if (p && p[1]) heroes.push(p);
+    }
+    cont = d.continue ? d.continue.cmcontinue : null;
+  } while (cont);
+}
+
+async function init() {
+  loader.style.display = 'flex';
+  img.style.display = 'none';
+  search.disabled = true;
+  btnGuess.disabled = true;
+  btnGive.disabled = true;
+
+  try {
+    await loadHeroList();
+  } catch(e) {
+    loadTxt.textContent = 'FAILED — check connection';
+    return;
+  }
+
+  nextHero(rand());
+}
+
+init();
+</script>
+</body>
+</html>
