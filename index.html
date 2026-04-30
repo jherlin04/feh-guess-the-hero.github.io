@@ -339,6 +339,8 @@ btnNext.addEventListener('click',  () => nextHero(rand()));
 function parseFile(title) {
   let s = title.replace('File:', '').replace(/ Face\.webp$/i, '').trim();
   if (s.endsWith(' Resplendent')) return null;
+  if (/Placeholder|Removed/i.test(title)) return null;
+  if (!/\.webp$/i.test(title)) return null;
   if (s.startsWith('Black Knight ')) return ['Black Knight', s.slice(13)];
   if (s.startsWith('Brigand Boss ')) return ['Brigand Boss', s.slice(13)];
   if (s.startsWith('Flame Emperor ')) return ['Flame Emperor', s.slice(13)];
