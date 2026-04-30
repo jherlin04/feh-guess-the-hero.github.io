@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="referrer" content="no-referrer">
-<title>FEH: Guess the Hero</title>
+<title>FEH: Guess the Heroes</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Crimson+Text:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -12,7 +12,7 @@
 <div id="wrap">
 
   <header>
-    <h1>GUESS THE HERO</h1>
+    <h1>GUESS THE HEROES</h1>
     <p>Fire Emblem Heroes</p>
   </header>
   <hr class="hdivider">
@@ -359,6 +359,8 @@ function parseFile(title) {
   if (/^Veronica .*Dark$/i.test(s)) return null;
   if (/^Veronica .*Injured$/i.test(s)) return null;
   if (/^Baldr .*Weakened$/i.test(s)) return null;
+  if (/^Heidr .*Cursed Goddess$/i.test(s)) return null;
+  if (/^Heidr .*Goddess Serpent$/i.test(s)) return null;
   const sp = s.indexOf(' ');
   if (sp < 0) return null;
   return [s.slice(0, sp), s.slice(sp + 1)];
