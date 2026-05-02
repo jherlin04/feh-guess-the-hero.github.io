@@ -17,56 +17,98 @@
   </header>
   <hr class="hdivider">
 
-  <div class="stats">
+  <div class="tabs">
+    <button class="tab active" data-mode="shadow">Shadow Quiz</button>
+    <button class="tab" data-mode="duo">Duo Shadow</button>
+    <button class="tab" data-mode="pixel">Pixel Quiz</button>
+    <button class="tab" data-mode="oddone">Odd One Out</button>
+  </div>
+
+  <div class="stats" id="stats-bar">
     <div class="stat"><span class="stat-label">Score</span><span class="stat-val" id="score">0</span></div>
     <div class="stat"><span class="stat-label">Streak</span><span class="stat-val" id="streak">0</span></div>
     <div class="stat"><span class="stat-label">Guesses</span><span class="stat-val" id="guesses">0 / 5</span></div>
   </div>
 
-  <div id="portrait-box">
-    <div id="loader">
-      <div class="spin"></div>
-      <span id="load-txt">LOADING</span>
+  <div id="quiz-ui">
+    <div id="portrait-box">
+      <div id="loader"><div class="spin"></div><span id="load-txt">LOADING</span></div>
+      <div id="no-portrait">Portrait unavailable — press Next</div>
+      <img id="portrait" class="hidden" alt="mystery hero" referrerpolicy="no-referrer">
+      <canvas id="pixel-canvas"></canvas>
+      <div id="duo-wrap">
+        <img id="portrait-a" class="hidden duo-img" alt="hero a" referrerpolicy="no-referrer">
+        <img id="portrait-b" class="hidden duo-img" alt="hero b" referrerpolicy="no-referrer">
+      </div>
+      <div id="pips"></div>
+      <div id="result-banner"></div>
     </div>
-    <div id="no-portrait">Portrait unavailable — press Next</div>
-    <img id="portrait" class="hidden" alt="mystery hero" referrerpolicy="no-referrer">
-    <div id="pips"></div>
-    <div id="result-banner"></div>
+
+    <div id="hint"></div>
+
+    <div class="search-row" id="single-search-row">
+      <input id="search" type="text" placeholder="Type a hero name..." autocomplete="off" spellcheck="false">
+      <div id="autocomplete"></div>
+    </div>
+
+    <div id="duo-searches" style="display:none">
+      <div class="duo-field">
+        <span class="duo-label">Hero 1</span>
+        <div class="search-row">
+          <input id="search-a" type="text" placeholder="First hero..." autocomplete="off" spellcheck="false">
+          <div id="autocomplete-a"></div>
+        </div>
+        <div id="status-a" class="duo-status"></div>
+      </div>
+      <div class="duo-field">
+        <span class="duo-label">Hero 2</span>
+        <div class="search-row">
+          <input id="search-b" type="text" placeholder="Second hero..." autocomplete="off" spellcheck="false">
+          <div id="autocomplete-b"></div>
+        </div>
+        <div id="status-b" class="duo-status"></div>
+      </div>
+    </div>
+
+    <div id="wrong-list"></div>
+
+    <div class="btns">
+      <button class="btn" id="btn-guess">GUESS</button>
+      <button class="btn" id="btn-giveup">GIVE UP</button>
+      <button class="btn" id="btn-next">NEXT →</button>
+    </div>
   </div>
 
-  <div id="hint"></div>
-
-  <div class="search-row">
-    <input id="search" type="text" placeholder="Type a hero name..." autocomplete="off" spellcheck="false">
-    <div id="autocomplete"></div>
-  </div>
-
-  <div id="wrong-list"></div>
-
-  <div class="btns">
-    <button class="btn" id="btn-guess">GUESS</button>
-    <button class="btn" id="btn-giveup">GIVE UP</button>
-    <button class="btn" id="btn-next">NEXT →</button>
+  <div id="oddone-ui" style="display:none">
+    <div id="oddone-loader"><div class="spin"></div><span>LOADING</span></div>
+    <div id="oddone-grid" style="display:none"></div>
+    <p id="oddone-instruction">Which title does NOT match any hero shown?</p>
+    <div id="oddone-choices"></div>
+    <div id="oddone-result"></div>
+    <div class="btns" style="margin-top:12px">
+      <button class="btn" id="btn-oddone-next" style="display:none">NEXT →</button>
+    </div>
   </div>
 
   <footer>
     <p>Portraits from <a href="https://feheroes.fandom.com" target="_blank">feheroes.fandom.com</a></p>
   </footer>
-
 </div>
 <script>
 let heroes = [];
-let cur = null;
-let guesses = 0;
-let done = false;
-let score = 0;
-let streak = 0;
-let acList = [];
-let acIdx = -1;
+let mode = 'shadow';
+let cur = null, curB = null;
+let guesses = 0, done = false;
+let score = 0, streak = 0;
+let duoGuessedA = false, duoGuessedB = false;
 const MAX = 5;
+let oddHeroes = [], oddAnswer = null, oddDone = false;
 
 const box      = document.getElementById('portrait-box');
 const img      = document.getElementById('portrait');
+const duoWrap  = document.getElementById('duo-wrap');
+const imgA     = document.getElementById('portrait-a');
+const imgB     = document.getElementById('portrait-b');
 const loader   = document.getElementById('loader');
 const loadTxt  = document.getElementById('load-txt');
 const noPort   = document.getElementById('no-portrait');
@@ -75,6 +117,10 @@ const pips     = document.getElementById('pips');
 const hint     = document.getElementById('hint');
 const search   = document.getElementById('search');
 const ac       = document.getElementById('autocomplete');
+const searchA  = document.getElementById('search-a');
+const acA      = document.getElementById('autocomplete-a');
+const searchB  = document.getElementById('search-b');
+const acB      = document.getElementById('autocomplete-b');
 const wrongList= document.getElementById('wrong-list');
 const scoreEl  = document.getElementById('score');
 const streakEl = document.getElementById('streak');
@@ -82,84 +128,38 @@ const guessEl  = document.getElementById('guesses');
 const btnGuess = document.getElementById('btn-guess');
 const btnGive  = document.getElementById('btn-giveup');
 const btnNext  = document.getElementById('btn-next');
+const quizUI   = document.getElementById('quiz-ui');
+const oddUI    = document.getElementById('oddone-ui');
+const statsBar = document.getElementById('stats-bar');
 
-function rand() {
-  return heroes[Math.floor(Math.random() * heroes.length)];
-}
-
-function refreshHUD() {
-  scoreEl.textContent  = score;
-  streakEl.textContent = streak;
-  guessEl.textContent  = guesses + ' / ' + MAX;
-}
-
-function rebuildPips() {
-  pips.innerHTML = '';
-  for (let i = 0; i < MAX; i++) {
-    const d = document.createElement('div');
-    d.className = 'pip' + (i < guesses ? ' used' : '');
-    pips.appendChild(d);
+function rand() { return heroes[Math.floor(Math.random() * heroes.length)]; }
+function randN(n) {
+  const out = [], used = new Set();
+  while (out.length < n) {
+    const h = rand(), k = h[0]+'|'+h[1];
+    if (!used.has(k)) { used.add(k); out.push(h); }
   }
+  return out;
 }
-
-function flash(type) {
-  box.classList.remove('fg', 'fr');
-  void box.offsetWidth; // reflow to restart animation
-  box.classList.add(type === 'win' ? 'fg' : 'fr');
-  setTimeout(() => box.classList.remove('fg', 'fr'), 700);
+function shuffle(a) { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a; }
+function clean(s) { return s.toLowerCase().replace(/['']/g,"'").replace(/[^a-z0-9' ]/g,'').trim(); }
+function refreshHUD() { scoreEl.textContent=score; streakEl.textContent=streak; guessEl.textContent=guesses+' / '+MAX; }
+function rebuildPips() {
+  pips.innerHTML='';
+  for(let i=0;i<MAX;i++){const d=document.createElement('div');d.className='pip'+(i<guesses?' used':'');pips.appendChild(d);}
 }
+function flash(type) { box.classList.remove('fg','fr'); void box.offsetWidth; box.classList.add(type==='win'?'fg':'fr'); setTimeout(()=>box.classList.remove('fg','fr'),700); }
+function showBanner(msg,cls){banner.textContent=msg;banner.className='show '+cls;}
+function hideBanner(){banner.className='';}
 
-function showBanner(msg, cls) {
-  banner.textContent = msg;
-  banner.className = 'show ' + cls;
-}
-
-function hideBanner() {
-  banner.className = '';
-}
-
-async function nextHero(hero) {
-  cur = hero;
-  guesses = 0;
-  done = false;
-
-  search.value = '';
-  search.disabled = false;
-  btnGuess.disabled = false;
-  btnGive.disabled = false;
-  btnNext.classList.remove('show');
-  ac.style.display = 'none';
-  wrongList.innerHTML = '';
-  hint.textContent = '';
-  hint.classList.remove('show');
-  hideBanner();
-  rebuildPips();
-  refreshHUD();
-
-  img.style.display = 'none';
-  img.className = 'hidden';
-  box.classList.remove('done');
-  loader.style.display = 'flex';
-  noPort.style.display = 'none';
-
-  // Build CDN URL directly from MD5 hash — no API call needed
-  const imgUrl = buildCdnUrl(hero[0] + ' ' + hero[1] + ' Face.webp');
-  img.src = imgUrl;
-  img.onload  = () => { loader.style.display = 'none'; img.style.display = 'block'; };
-  img.onerror = () => { loader.style.display = 'none'; noPort.style.display = 'flex'; };
-}
-
-// MediaWiki CDN path: /images/HASH[0]/HASH[0..1]/Filename
 function buildCdnUrl(filename) {
-  const normalized = filename.replace(/ /g, '_');
+  const normalized = filename.replace(/ /g,'_');
   const hash = md5(normalized);
-  return 'https://static.wikia.nocookie.net/feheroes_gamepedia_en/images/'
-    + hash[0] + '/' + hash[0] + hash[1] + '/' + encodeURIComponent(normalized) + '/revision/latest?cb=1';
+  return 'https://static.wikia.nocookie.net/feheroes_gamepedia_en/images/'+hash[0]+'/'+hash[0]+hash[1]+'/'+encodeURIComponent(normalized)+'/revision/latest?cb=1';
 }
 
 function md5(str) {
-  // Encode to bytes first
-  str = unescape(encodeURIComponent(str));
+  str=unescape(encodeURIComponent(str));
   function safeAdd(x,y){var lsw=(x&0xffff)+(y&0xffff);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xffff);}
   function rol(n,c){return(n<<c)|(n>>>(32-c));}
   function cmn(q,a,b,x,s,t){return safeAdd(rol(safeAdd(safeAdd(a,q),safeAdd(x,t)),s),b);}
@@ -167,7 +167,7 @@ function md5(str) {
   function gg(a,b,c,d,x,s,t){return cmn((b&d)|(c&(~d)),a,b,x,s,t);}
   function hh(a,b,c,d,x,s,t){return cmn(b^c^d,a,b,x,s,t);}
   function ii(a,b,c,d,x,s,t){return cmn(c^(b|(~d)),a,b,x,s,t);}
-  var n=str.length, st=[1732584193,-271733879,-1732584194,271733878];
+  var n=str.length,st=[1732584193,-271733879,-1732584194,271733878];
   function blk64(s,i){var b=[];for(var j=0;j<16;j++)b[j]=(s.charCodeAt(i+j*4))|(s.charCodeAt(i+j*4+1)<<8)|(s.charCodeAt(i+j*4+2)<<16)|(s.charCodeAt(i+j*4+3)<<24);return b;}
   function cycle(st,b){
     var a=st[0],bb=st[1],c=st[2],d=st[3];
@@ -189,161 +189,329 @@ function md5(str) {
     a=ii(a,bb,c,d,b[4],6,-145523070);d=ii(d,a,bb,c,b[11],10,-1120210379);c=ii(c,d,a,bb,b[2],15,718787259);bb=ii(bb,c,d,a,b[9],21,-343485551);
     return[safeAdd(a,st[0]),safeAdd(bb,st[1]),safeAdd(c,st[2]),safeAdd(d,st[3])];
   }
-  var i; for(i=64;i<=n;i+=64) st=cycle(st,blk64(str,i-64));
-  var tail=str.slice(i-64), buf=new Array(16).fill(0);
-  for(var j=0;j<tail.length;j++) buf[j>>2]|=tail.charCodeAt(j)<<((j%4)*8);
+  var i;for(i=64;i<=n;i+=64)st=cycle(st,blk64(str,i-64));
+  var tail=str.slice(i-64),buf=new Array(16).fill(0);
+  for(var j=0;j<tail.length;j++)buf[j>>2]|=tail.charCodeAt(j)<<((j%4)*8);
   buf[tail.length>>2]|=0x80<<((tail.length%4)*8);
   if(tail.length>55){st=cycle(st,buf);buf=new Array(16).fill(0);}
-  buf[14]=n*8;
-  st=cycle(st,buf);
+  buf[14]=n*8;st=cycle(st,buf);
   return st.map(v=>{var s='';for(var k=0;k<4;k++)s+=('0'+((v>>>(k*8))&0xff).toString(16)).slice(-2);return s;}).join('');
 }
 
-function endRound(won) {
-  done = true;
-  search.disabled = true;
-  btnGuess.disabled = true;
-  btnGive.disabled = true;
-  btnNext.classList.add('show');
-  ac.style.display = 'none';
-  img.className = 'shown';
-  box.classList.add('done');
+const pixelCanvas = document.getElementById('pixel-canvas');
 
-  if (won) {
-    const pts = Math.max(10, (MAX - guesses + 1) * 10);
-    score += pts;
-    streak++;
-    showBanner('✦ ' + cur[0] + ': ' + cur[1] + '  +' + pts + ' pts', 'win');
-    flash('win');
+function loadImg(el, hero, className, cb) {
+  el.className = className;
+  el.style.display = 'none';
+  el.src = buildCdnUrl(hero[0]+' '+hero[1]+' Face.webp');
+  el.onload  = () => { el.style.display='block'; cb&&cb(true); };
+  el.onerror = () => { cb&&cb(false); };
+}
+
+function drawPixelated(srcImg) {
+  // Draw the image at a tiny grid size then scale back up for chunky blocks
+  const PIXEL_SIZE = 16; // number of pixel "blocks" wide
+  const aspect = srcImg.naturalHeight / srcImg.naturalWidth;
+  const ROWS = Math.round(PIXEL_SIZE * aspect);
+
+  const offscreen = document.createElement('canvas');
+  offscreen.width  = PIXEL_SIZE;
+  offscreen.height = ROWS;
+  const ctx = offscreen.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(srcImg, 0, 0, PIXEL_SIZE, ROWS);
+
+  // Scale up to fill the display canvas
+  pixelCanvas.width  = pixelCanvas.offsetWidth  || 400;
+  pixelCanvas.height = pixelCanvas.offsetHeight || 480;
+  const dctx = pixelCanvas.getContext('2d');
+  dctx.imageSmoothingEnabled = false;
+  dctx.drawImage(offscreen, 0, 0, pixelCanvas.width, pixelCanvas.height);
+}
+
+// ── SHADOW / PIXEL ─────────────────────────────────────────────────────────────
+function startSingle(hero) {
+  cur=hero; guesses=0; done=false;
+  search.value=''; search.disabled=false;
+  btnGuess.disabled=false; btnGive.disabled=false;
+  btnNext.classList.remove('show');
+  ac.style.display='none';
+  wrongList.innerHTML='';
+  hint.textContent=''; hint.classList.remove('show');
+  hideBanner(); rebuildPips(); refreshHUD();
+  duoWrap.style.display='none'; img.style.display='none';
+  pixelCanvas.style.display='none';
+  box.classList.remove('done'); loader.style.display='flex'; noPort.style.display='none';
+
+  if (mode === 'pixel') {
+    img.removeAttribute('src');
+    img.style.display = 'none';
+    noPort.style.display = 'none';
+    const heroUrl = buildCdnUrl(hero[0]+' '+hero[1]+' Face.webp');
+    img._pixelSrc = heroUrl;
+    const tempImg = new Image();
+    tempImg.crossOrigin = 'anonymous';
+    tempImg.referrerPolicy = 'no-referrer';
+    tempImg.onload = () => {
+      loader.style.display = 'none';
+      noPort.style.display = 'none';
+      drawPixelated(tempImg);
+      pixelCanvas.style.display = 'block';
+    };
+    tempImg.onerror = () => {
+      loader.style.display = 'none';
+      pixelCanvas.style.display = 'none';
+      noPort.style.display = 'flex';
+    };
+    tempImg.src = heroUrl;
   } else {
-    streak = 0;
-    showBanner(cur[0] + ': ' + cur[1], 'reveal');
-    flash('lose');
+    loadImg(img, hero, 'hidden', ok => { loader.style.display='none'; if(!ok) noPort.style.display='flex'; });
+  }
+}
+
+function endSingle(won) {
+  done=true; search.disabled=true; btnGuess.disabled=true; btnGive.disabled=true;
+  btnNext.classList.add('show'); ac.style.display='none'; box.classList.add('done');
+  // Hide canvas, reveal full portrait
+  pixelCanvas.style.display = 'none';
+  noPort.style.display = 'none';
+  if (mode === 'pixel') {
+    img.src = img._pixelSrc || buildCdnUrl(cur[0]+' '+cur[1]+' Face.webp');
+  }
+  img.style.display = 'block';
+  img.className = 'shown';
+  if (won) {
+    const pts=Math.max(10,(MAX-guesses+1)*10); score+=pts; streak++;
+    showBanner('✦ '+cur[0]+': '+cur[1]+'  +'+pts+' pts','win'); flash('win');
+  } else {
+    score=0; streak=0;
+    showBanner(cur[0]+': '+cur[1],'reveal'); flash('lose');
   }
   refreshHUD();
 }
 
-// strips punctuation/case for comparison
-function clean(s) {
-  return s.toLowerCase().replace(/['']/g, "'").replace(/[^a-z0-9' ]/g, '').trim();
-}
-
-function guess() {
-  if (done) return;
-  const val = search.value.trim();
-  if (!val) return;
-  ac.style.display = 'none';
-
-  guesses++;
-  rebuildPips();
-  refreshHUD();
-
-  const g = clean(val);
-  const full  = clean(cur[0] + ' ' + cur[1]);
-  const full2 = clean(cur[0] + ': ' + cur[1]);
-
-  if (g === full || g === full2) {
-    endRound(true);
-    return;
-  }
-
-  // add wrong tag
-  const tag = document.createElement('div');
-  tag.className = 'wrong-tag';
-  tag.textContent = val;
-  wrongList.appendChild(tag);
+function guessSingle() {
+  if(done) return;
+  const val=search.value.trim(); if(!val) return;
+  ac.style.display='none'; guesses++; rebuildPips(); refreshHUD();
+  const g=clean(val);
+  if(g===clean(cur[0]+' '+cur[1])||g===clean(cur[0]+': '+cur[1])){endSingle(true);return;}
+  const tag=document.createElement('div'); tag.className='wrong-tag'; tag.textContent=val; wrongList.appendChild(tag);
   flash('lose');
-
-  if (guesses >= MAX) {
-    endRound(false);
-    return;
-  }
-
-  // hints unlock one at a time
-  const hints = [
-    null,
-    'First name starts with "' + cur[0][0] + '"',
-    'First name: ' + cur[0],
-    cur[0] + ': ' + cur[1].slice(0, 4) + '...',
-    cur[0] + ': ' + cur[1].slice(0, 7) + '...',
-  ];
-  if (hints[guesses]) {
-    hint.textContent = hints[guesses];
-    hint.classList.remove('show');
-    void hint.offsetWidth;
-    hint.classList.add('show');
-  }
-
-  const left = MAX - guesses;
-  showBanner('✗  ' + left + ' guess' + (left !== 1 ? 'es' : '') + ' left', 'bad');
-  setTimeout(hideBanner, 1400);
-  search.value = '';
-  search.focus();
+  if(guesses>=MAX){endSingle(false);return;}
+  const hints=[null,'First name starts with "'+cur[0][0]+'"','First name: '+cur[0],cur[0]+': '+cur[1].slice(0,4)+'...',cur[0]+': '+cur[1].slice(0,7)+'...'];
+  if(hints[guesses]){hint.textContent=hints[guesses];hint.classList.remove('show');void hint.offsetWidth;hint.classList.add('show');}
+  const left=MAX-guesses;
+  showBanner('✗  '+left+' guess'+(left!==1?'es':'')+' left','bad'); setTimeout(hideBanner,1400);
+  search.value=''; search.focus();
 }
 
-// autocomplete
+// ── DUO ────────────────────────────────────────────────────────────────────────
+function startDuo() {
+  const pair=randN(2); cur=pair[0]; curB=pair[1];
+  guesses=0; done=false; duoGuessedA=false; duoGuessedB=false;
+  searchA.value=''; searchA.disabled=false;
+  searchB.value=''; searchB.disabled=false;
+  btnGuess.disabled=false; btnGive.disabled=false;
+  btnNext.classList.remove('show');
+  acA.style.display='none'; acB.style.display='none';
+  wrongList.innerHTML=''; hint.textContent=''; hint.classList.remove('show');
+  document.getElementById('status-a').textContent=''; document.getElementById('status-a').className='duo-status';
+  document.getElementById('status-b').textContent=''; document.getElementById('status-b').className='duo-status';
+  hideBanner(); rebuildPips(); refreshHUD();
+  box.classList.remove('done'); loader.style.display='flex'; noPort.style.display='none';
+  pixelCanvas.style.display='none';
+  img.style.display='none'; duoWrap.style.display='flex'; imgA.style.display='none'; imgB.style.display='none';
+  let loaded=0;
+  function onLoad(ok){
+    loaded++;
+    if(loaded===2){
+      loader.style.display='none';
+      // Reveal both simultaneously only when both are ready
+      if(imgA.complete && imgA.naturalWidth) imgA.style.display='block';
+      if(imgB.complete && imgB.naturalWidth) imgB.style.display='block';
+    }
+  }
+  // Pre-set display none and load; don't show individually
+  imgA.style.display='none'; imgB.style.display='none';
+  imgA.className='hidden duo-img'; imgA.referrerPolicy='no-referrer';
+  imgB.className='hidden duo-img'; imgB.referrerPolicy='no-referrer';
+  imgA.src=buildCdnUrl(cur[0]+' '+cur[1]+' Face.webp');
+  imgB.src=buildCdnUrl(curB[0]+' '+curB[1]+' Face.webp');
+  imgA.onload=()=>onLoad(true);  imgA.onerror=()=>onLoad(false);
+  imgB.onload=()=>onLoad(true);  imgB.onerror=()=>onLoad(false);
+}
+
+function endDuo(won) {
+  done=true; searchA.disabled=true; searchB.disabled=true;
+  btnGuess.disabled=true; btnGive.disabled=true;
+  btnNext.classList.add('show'); acA.style.display='none'; acB.style.display='none';
+  box.classList.add('done'); imgA.className='shown duo-img'; imgB.className='shown duo-img';
+  if(won){
+    const pts=Math.max(10,(MAX-guesses+1)*10); score+=pts; streak++;
+    showBanner('✦ Both correct!  +'+pts+' pts','win'); flash('win');
+  } else {
+    score=0; streak=0;
+    showBanner(cur[0]+': '+cur[1]+'  &  '+curB[0]+': '+curB[1],'reveal'); flash('lose');
+  }
+  refreshHUD();
+}
+
+function guessDuo() {
+  if(done) return;
+  const valA=searchA.value.trim(), valB=searchB.value.trim();
+  if(!valA&&!valB) return;
+  guesses++; rebuildPips(); refreshHUD();
+  const sA=document.getElementById('status-a'), sB=document.getElementById('status-b');
+  if(!duoGuessedA&&valA){
+    if(clean(valA)===clean(cur[0]+' '+cur[1])||clean(valA)===clean(cur[0]+': '+cur[1])){
+      duoGuessedA=true; sA.textContent='✓ '+cur[0]+': '+cur[1]; sA.className='duo-status correct'; searchA.disabled=true;
+    } else { sA.textContent='✗ Wrong'; sA.className='duo-status wrong'; }
+  }
+  if(!duoGuessedB&&valB){
+    if(clean(valB)===clean(curB[0]+' '+curB[1])||clean(valB)===clean(curB[0]+': '+curB[1])){
+      duoGuessedB=true; sB.textContent='✓ '+curB[0]+': '+curB[1]; sB.className='duo-status correct'; searchB.disabled=true;
+    } else { sB.textContent='✗ Wrong'; sB.className='duo-status wrong'; }
+  }
+  flash(duoGuessedA&&duoGuessedB?'win':'lose');
+  if(duoGuessedA&&duoGuessedB){endDuo(true);return;}
+  if(guesses>=MAX){endDuo(false);return;}
+  const left=MAX-guesses;
+  showBanner('✗  '+left+' guess'+(left!==1?'es':'')+' left','bad'); setTimeout(hideBanner,1400);
+  if(!duoGuessedA) searchA.value='';
+  if(!duoGuessedB) searchB.value='';
+}
+
+// ── ODD ONE OUT ────────────────────────────────────────────────────────────────
+function startOddOne() {
+  oddDone=false; oddHeroes=randN(5);
+  const grid=document.getElementById('oddone-grid');
+  const choices=document.getElementById('oddone-choices');
+  const result=document.getElementById('oddone-result');
+  const oLoader=document.getElementById('oddone-loader');
+  grid.innerHTML=''; choices.innerHTML=''; result.innerHTML=''; result.className='';
+  oLoader.style.display='flex'; grid.style.display='none';
+  document.getElementById('btn-oddone-next').style.display='none';
+  let loaded=0;
+  oddHeroes.forEach((h,i)=>{
+    const im=document.createElement('img');
+    im.className='oddone-portrait'; im.alt='hero '+(i+1); im.referrerPolicy='no-referrer';
+    im.src=buildCdnUrl(h[0]+' '+h[1]+' Face.webp');
+    im.onload=im.onerror=()=>{loaded++;if(loaded===5){oLoader.style.display='none';grid.style.display='grid';buildChoices();}};
+    grid.appendChild(im);
+  });
+}
+
+function buildChoices() {
+  const choices=document.getElementById('oddone-choices');
+  const epithets=oddHeroes.map(h=>h[1]);
+  // Pick a fake epithet not belonging to any shown hero
+  let fake; do{fake=rand()[1];}while(epithets.includes(fake));
+  oddAnswer=fake;
+  // Drop one random real epithet: keep 4 real + 1 fake = 5 buttons total
+  const dropped=Math.floor(Math.random()*5);
+  const shown=epithets.filter((_,i)=>i!==dropped);
+  shuffle([...shown,fake]).forEach(ep=>{
+    const btn=document.createElement('button');
+    btn.className='choice-btn'; btn.textContent=ep;
+    btn.addEventListener('click',()=>pickChoice(ep,btn));
+    choices.appendChild(btn);
+  });
+}
+
+function pickChoice(ep,btn) {
+  if(oddDone) return; oddDone=true;
+  document.querySelectorAll('.choice-btn').forEach(b=>{
+    b.disabled=true;
+    b.classList.add(b.textContent===oddAnswer?'choice-correct':'choice-matched');
+  });
+  const resultEl=document.getElementById('oddone-result');
+  const won=ep===oddAnswer;
+  btn.classList.remove('choice-matched','choice-correct');
+  btn.classList.add(won?'choice-correct':'choice-wrong');
+  resultEl.className='oddone-verdict '+(won?'win':'lose');
+  resultEl.innerHTML=(won?'✦ Correct!':'✗ Wrong — the odd one out was: <strong>'+oddAnswer+'</strong>');
+  const reveal=document.createElement('div'); reveal.className='oddone-reveal';
+  oddHeroes.forEach((h,i)=>{
+    const d=document.createElement('div'); d.className='oddone-reveal-item';
+    d.textContent=(i+1)+'. '+h[0]+': '+h[1]; reveal.appendChild(d);
+  });
+  resultEl.appendChild(reveal);
+  document.getElementById('btn-oddone-next').style.display='block';
+}
+
+// ── AUTOCOMPLETE ───────────────────────────────────────────────────────────────
 function filterHeroes(q) {
-  if (!q) return [];
-  const lq = q.toLowerCase();
-  return heroes.filter(h => {
-    const full = (h[0] + ' ' + h[1]).toLowerCase();
-    return full.includes(lq) || h[0].toLowerCase().startsWith(lq);
+  if(!q) return [];
+  const lq=q.toLowerCase();
+  return heroes.filter(h=>{const full=(h[0]+' '+h[1]).toLowerCase();return full.includes(lq)||h[0].toLowerCase().startsWith(lq);});
+}
+
+function setupAC(inputEl,dropEl,onPick) {
+  const ref={list:[],idx:-1};
+  function render(list){
+    ref.list=list;ref.idx=-1;
+    if(!list.length){dropEl.style.display='none';return;}
+    dropEl.innerHTML='';
+    list.forEach(h=>{
+      const d=document.createElement('div');d.className='ac-item';
+      d.innerHTML='<span class="ac-name">'+h[0]+'</span><span class="ac-epithet">'+h[1]+'</span>';
+      d.addEventListener('mousedown',e=>{e.preventDefault();onPick(h);dropEl.style.display='none';});
+      dropEl.appendChild(d);
+    });
+    dropEl.style.display='block';
+  }
+  inputEl.addEventListener('input',()=>render(filterHeroes(inputEl.value)));
+  inputEl.addEventListener('keydown',e=>{
+    const items=dropEl.querySelectorAll('.ac-item');
+    if(e.key==='ArrowDown'){e.preventDefault();ref.idx=Math.min(ref.idx+1,items.length-1);items.forEach((el,j)=>el.classList.toggle('hi',j===ref.idx));}
+    else if(e.key==='ArrowUp'){e.preventDefault();ref.idx=Math.max(ref.idx-1,-1);items.forEach((el,j)=>el.classList.toggle('hi',j===ref.idx));}
+    else if(e.key==='Escape'){dropEl.style.display='none';}
   });
+  inputEl.addEventListener('blur',()=>setTimeout(()=>dropEl.style.display='none',160));
 }
 
-function renderAC(list) {
-  acList = list;
-  acIdx = -1;
-  if (!list.length) { ac.style.display = 'none'; return; }
-  ac.innerHTML = '';
-  list.forEach(h => {
-    const d = document.createElement('div');
-    d.className = 'ac-item';
-    d.innerHTML = '<span class="ac-name">' + h[0] + '</span><span class="ac-epithet">' + h[1] + '</span>';
-    d.addEventListener('mousedown', e => { e.preventDefault(); pickAC(h); });
-    ac.appendChild(d);
+setupAC(search, ac, h=>{search.value=h[0]+': '+h[1];search.focus();});
+setupAC(searchA,acA,h=>{searchA.value=h[0]+': '+h[1];searchA.focus();});
+setupAC(searchB,acB,h=>{searchB.value=h[0]+': '+h[1];searchB.focus();});
+
+// ── BUTTON WIRING ──────────────────────────────────────────────────────────────
+btnGuess.addEventListener('click',()=>mode==='duo'?guessDuo():guessSingle());
+btnGive.addEventListener('click',()=>{if(!done){if(mode==='duo')endDuo(false);else endSingle(false);}});
+btnNext.addEventListener('click',()=>startMode());
+document.getElementById('btn-oddone-next').addEventListener('click',startOddOne);
+search.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();guessSingle();}});
+searchA.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();guessDuo();}});
+searchB.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();guessDuo();}});
+
+// ── TABS ───────────────────────────────────────────────────────────────────────
+function startMode() {
+  if(mode==='oddone'){
+    quizUI.style.display='none'; oddUI.style.display='block'; statsBar.style.display='none';
+    startOddOne(); return;
+  }
+  quizUI.style.display='block'; oddUI.style.display='none'; statsBar.style.display='flex';
+  document.getElementById('single-search-row').style.display = mode==='duo'?'none':'block';
+  document.getElementById('duo-searches').style.display = mode==='duo'?'block':'none';
+  if(mode==='duo') startDuo(); else startSingle(rand());
+}
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    mode=tab.dataset.mode;
+    score=0; streak=0;
+    startMode();
   });
-  ac.style.display = 'block';
-}
-
-function pickAC(h) {
-  search.value = h[0] + ': ' + h[1];
-  ac.style.display = 'none';
-  search.focus();
-}
-
-function highlightAC(i) {
-  ac.querySelectorAll('.ac-item').forEach((el, j) => el.classList.toggle('hi', j === i));
-}
-
-search.addEventListener('input', () => {
-  if (done) return;
-  renderAC(filterHeroes(search.value));
 });
 
-search.addEventListener('keydown', e => {
-  const items = ac.querySelectorAll('.ac-item');
-  if (e.key === 'ArrowDown')  { e.preventDefault(); acIdx = Math.min(acIdx + 1, items.length - 1); highlightAC(acIdx); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); acIdx = Math.max(acIdx - 1, -1); highlightAC(acIdx); }
-  else if (e.key === 'Enter') { e.preventDefault(); acIdx >= 0 && acList[acIdx] ? pickAC(acList[acIdx]) : guess(); }
-  else if (e.key === 'Escape') { ac.style.display = 'none'; }
-});
-
-search.addEventListener('blur', () => setTimeout(() => ac.style.display = 'none', 160));
-
-btnGuess.addEventListener('click', guess);
-btnGive.addEventListener('click',  () => { if (!done) endRound(false); });
-btnNext.addEventListener('click',  () => nextHero(rand()));
-
-// parse "File:Name Epithet Face.webp" into [name, epithet]
+// ── PARSE WIKI FILENAMES ───────────────────────────────────────────────────────
 function parseFile(title) {
-  let s = title.replace('File:', '').replace(/ Face\.webp$/i, '').trim();
-  if (s.endsWith(' Resplendent')) return null;
-  if (/Placeholder|Removed/i.test(title)) return null;
-  if (!/\.webp$/i.test(title)) return null;
-  if (s.startsWith('Black Knight ')) return ['Black Knight', s.slice(13)];
-  if (s.startsWith('Brigand Boss ')) return ['Brigand Boss', s.slice(13)];
-  if (s.startsWith('Flame Emperor ')) return ['Flame Emperor', s.slice(13)];
+  if(/Placeholder|Removed/i.test(title)) return null;
+  if(!/\.webp$/i.test(title)) return null;
+  let s=title.replace('File:','').replace(/ Face\.webp$/i,'').trim();
+  if(s.endsWith(' Resplendent')) return null;
   if (/^Fafnir .*Dragon$/i.test(s)) return null;
   if (/^Bruno .*Unmasked$/i.test(s)) return null;
   if (/^Bruno .*Injured$/i.test(s)) return null;
@@ -361,42 +529,33 @@ function parseFile(title) {
   if (/^Baldr .*Weakened$/i.test(s)) return null;
   if (/^Heidr .*Cursed Goddess$/i.test(s)) return null;
   if (/^Heidr .*Goddess Serpent$/i.test(s)) return null;
-  const sp = s.indexOf(' ');
-  if (sp < 0) return null;
-  return [s.slice(0, sp), s.slice(sp + 1)];
+  if (/^Letizia .*Dark$/i.test(s)) return null;
+  if(s.startsWith('Black Knight ')) return ['Black Knight',s.slice(13)];
+  if(s.startsWith('Brigand Boss ')) return ['Brigand Boss',s.slice(13)];
+  if(s.startsWith('Flame Emperor ')) return ['Flame Emperor',s.slice(14)];
+  if(s.startsWith('Death Knight ')) return ['Death Knight',s.slice(13)];
+  const sp=s.indexOf(' '); if(sp<0) return null;
+  return [s.slice(0,sp),s.slice(sp+1)];
 }
 
 async function loadHeroList() {
-  loadTxt.textContent = 'LOADING HEROES';
-  let cont = null;
+  loadTxt.textContent='LOADING HEROES';
+  let cont=null;
   do {
-    let url = 'https://feheroes.fandom.com/api.php?action=query&list=categorymembers&cmtitle=Category:Full_Portrait_files&cmlimit=500&cmtype=file&format=json&origin=*';
-    if (cont) url += '&cmcontinue=' + encodeURIComponent(cont);
-    const r = await fetch(url);
-    const d = await r.json();
-    for (const item of d.query.categorymembers) {
-      const p = parseFile(item.title);
-      if (p && p[1]) heroes.push(p);
-    }
-    cont = d.continue ? d.continue.cmcontinue : null;
-  } while (cont);
+    let url='https://feheroes.fandom.com/api.php?action=query&list=categorymembers&cmtitle=Category:Full_Portrait_files&cmlimit=500&cmtype=file&format=json&origin=*';
+    if(cont) url+='&cmcontinue='+encodeURIComponent(cont);
+    const r=await fetch(url), d=await r.json();
+    for(const item of d.query.categorymembers){const p=parseFile(item.title);if(p&&p[1])heroes.push(p);}
+    cont=d.continue?d.continue.cmcontinue:null;
+  } while(cont);
 }
 
 async function init() {
-  loader.style.display = 'flex';
-  img.style.display = 'none';
-  search.disabled = true;
-  btnGuess.disabled = true;
-  btnGive.disabled = true;
-
-  try {
-    await loadHeroList();
-  } catch(e) {
-    loadTxt.textContent = 'FAILED — check connection';
-    return;
-  }
-
-  nextHero(rand());
+  loader.style.display='flex'; img.style.display='none';
+  search.disabled=true; btnGuess.disabled=true; btnGive.disabled=true;
+  try{await loadHeroList();}
+  catch(e){loadTxt.textContent='FAILED — check connection';return;}
+  startMode();
 }
 
 init();
