@@ -80,6 +80,9 @@
   </div>
 
   <div id="oddone-ui" style="display:none">
+    <div class="stats" id="oddone-stats-bar" style="margin-bottom:10px">
+      <div class="stat"><span class="stat-label">Streak</span><span class="stat-val" id="odd-streak">0</span></div>
+    </div>
     <div id="oddone-loader"><div class="spin"></div><span>LOADING</span></div>
     <div id="oddone-grid" style="display:none"></div>
     <p id="oddone-instruction">Which title does NOT match any hero shown?</p>
@@ -103,6 +106,7 @@ let score = 0, streak = 0;
 let duoGuessedA = false, duoGuessedB = false;
 const MAX = 5;
 let oddHeroes = [], oddAnswer = null, oddDone = false;
+let oddStreak = 0;
 
 const box      = document.getElementById('portrait-box');
 const img      = document.getElementById('portrait');
@@ -429,8 +433,10 @@ function pickChoice(ep,btn) {
   const won=ep===oddAnswer;
   btn.classList.remove('choice-matched','choice-correct');
   btn.classList.add(won?'choice-correct':'choice-wrong');
+  if(won){ oddStreak++; } else { oddStreak=0; }
+  document.getElementById('odd-streak').textContent=oddStreak;
   resultEl.className='oddone-verdict '+(won?'win':'lose');
-  resultEl.innerHTML=(won?'✦ Correct!':'✗ Wrong — the odd one out was: <strong>'+oddAnswer+'</strong>');
+  resultEl.innerHTML=(won?'✦ Correct! Streak: '+oddStreak:'✗ Wrong — the odd one out was: <strong>'+oddAnswer+'</strong>');
   const reveal=document.createElement('div'); reveal.className='oddone-reveal';
   oddHeroes.forEach((h,i)=>{
     const d=document.createElement('div'); d.className='oddone-reveal-item';
